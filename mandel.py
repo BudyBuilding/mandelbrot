@@ -1,11 +1,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from matplotlib.widgets import RectangleSelector, Button
+from matplotlib.widgets import RectangleSelector
 import time
 import tkinter as tk
 from tkinter import ttk
 from concurrent.futures import ProcessPoolExecutor
+
 
 # Mandelbrot set parameters
 def mandelbrot(c, max_iter):
@@ -13,8 +14,9 @@ def mandelbrot(c, max_iter):
     for n in range(max_iter):
         if abs(z) > 2:
             return n
-        z = z**2 + c
+        z = z ** 2 + c
     return max_iter
+
 
 # Compute a row of the Mandelbrot set (this function is now global)
 def compute_row(i, real, imag, max_iter, width):
@@ -24,27 +26,37 @@ def compute_row(i, real, imag, max_iter, width):
         row.append(mandelbrot(c, max_iter))
     return row
 
+
 # Generate Mandelbrot set with parallel processing
 def generate_mandelbrot(xmin, xmax, ymin, ymax, width, height, max_iter):
     real = np.linspace(xmin, xmax, width)
     imag = np.linspace(ymin, ymax, height)
-    
+
     # Parallelize row computations using ProcessPoolExecutor
     with ProcessPoolExecutor() as executor:
-        mandelbrot_set = list(executor.map(compute_row, range(height), [real]*height, [imag]*height, [max_iter]*height, [width]*height))
+        mandelbrot_set = list(
+            executor.map(compute_row, range(height), [real] * height, [imag] * height, [max_iter] * height,
+                         [width] * height))
 
     return np.array(mandelbrot_set)
+
 
 # Global variables for zoom management and timing
 zoom_params = {'xmin': -2.5, 'xmax': 1, 'ymin': -1.5, 'ymax': 1.5}
 original_zoom = zoom_params.copy()  # Save original zoom
 zoom_history = [zoom_params.copy()]  # Keep track of zoom steps
 timing_history = []  # Store the timing of each step
-width, height, max_iter = 800, 800, 100  # Default resolution and iterations
+width, height, max_iter = 800, 800, 3000  # Default resolution and iterations
+
+# Global time text widget referencea
+time_text = None  # Globally initialized
+ax = None  # Define ax as a global variable to be accessed in update_plot and other functions
+canvas = None  # Define canvas as a global variable
+
 
 # Function to update plot based on zoom
 def update_plot(xmin, xmax, ymin, ymax):
-    global zoom_params, timing_history
+    global zoom_params, timing_history, time_text, ax, canvas
     zoom_params.update({'xmin': xmin, 'xmax': xmax, 'ymin': ymin, 'ymax': ymax})
 
     # Measure time for Mandelbrot generation
@@ -70,12 +82,14 @@ def update_plot(xmin, xmax, ymin, ymax):
     # Print to console
     print(f"Last step time: {elapsed_time:.2f}s, Average time: {average_time:.2f}s")
 
+
 # Callback function for rectangle selector
 def onselect(eclick, erelease):
     xmin, xmax = sorted([eclick.xdata, erelease.xdata])
     ymin, ymax = sorted([eclick.ydata, erelease.ydata])
     zoom_history.append(zoom_params.copy())  # Save current zoom before changing
     update_plot(xmin, xmax, ymin, ymax)
+
 
 # Reset to original zoom
 def reset():
@@ -85,6 +99,7 @@ def reset():
     timing_history = []  # Clear timing history
     update_plot(**original_zoom)
 
+
 # Go back one zoom step
 def zoom_back():
     global zoom_history
@@ -93,13 +108,21 @@ def zoom_back():
         previous_zoom = zoom_history[-1]  # Get the last zoom
         update_plot(**previous_zoom)
 
+
 # Tkinter GUI setup
 def run_gui():
+    global time_text, ax, canvas  # Referencing the global time_text, ax, and canvas widget
+
     root = tk.Tk()
     root.title("Mandelbrot Set Zoom")
 
     # Create a matplotlib figure
-    fig, ax = plt.subplots(figsize=(10, 10))
+    fig, ax_local = plt.subplots(figsize=(10, 10))  # Local ax for this function
+    ax = ax_local  # Assign to global ax
+
+    # Create the canvas
+    canvas_local = FigureCanvasTkAgg(fig, master=root)  # Create canvas locally
+    canvas = canvas_local  # Assign to global canvas
 
     # Initial plot
     mandelbrot_initial = generate_mandelbrot(
@@ -114,8 +137,7 @@ def run_gui():
     # Add rectangle selector
     toggle_selector = RectangleSelector(ax, onselect, useblit=True, button=[1], interactive=True)
 
-    # Create a canvas to embed the figure in the Tkinter window
-    canvas = FigureCanvasTkAgg(fig, master=root)
+    # Embed the canvas into the Tkinter window
     canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
 
     # Add a Frame for Buttons and Time Info
@@ -136,6 +158,7 @@ def run_gui():
 
     # Start Tkinter main loop
     root.mainloop()
+
 
 if __name__ == '__main__':
     run_gui()
